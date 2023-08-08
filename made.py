@@ -1,11 +1,12 @@
 from typing import List, Optional
+
 import numpy as np
-from numpy.random import permutation, randint
 import torch
 import torch.nn as nn
+from numpy.random import permutation, randint
 from torch import Tensor
-from torch.nn import functional as F
 from torch.nn import ReLU
+from torch.nn import functional as F
 
 # This implementation of MADE is copied from: https://github.com/e-hulten/made.
 
@@ -21,15 +22,14 @@ class MaskedLinear(nn.Linear):
             bias: Whether to include additive bias. Default: True.
         """
         super().__init__(n_in, n_out, bias)
-        self.mask = None
+        self.mask = nn.parameter.Parameter(torch.ones((n_out, n_in), dtype=torch.int32))
 
     def initialise_mask(self, mask: Tensor):
         """Internal method to initialise mask."""
-        self.mask = mask
-
+        self.mask = self.mask.data.copy_(mask)
     def forward(self, x: Tensor) -> Tensor:
         """Apply masked linear transformation."""
-        return F.linear(x, self.mask * self.weight, self.bias)
+        return F.linear(x, self.mask.int().to(self.weight.device) * self.weight, self.bias)
 
 
 class MADE(nn.Module):
@@ -42,7 +42,7 @@ class MADE(nn.Module):
         seed: Optional[int] = None,
     ) -> None:
         """Initalise MADE model.
-    
+
         Args:
             n_in: Size of input.
             hidden_dims: List with sizes of the hidden layers.
@@ -66,7 +66,9 @@ class MADE(nn.Module):
         dim_list = [self.n_in, *hidden_dims, self.n_out]
         # Make layers and activation functions.
         for i in range(len(dim_list) - 2):
-            self.layers.append(MaskedLinear(dim_list[i], dim_list[i + 1]),)
+            self.layers.append(
+                MaskedLinear(dim_list[i], dim_list[i + 1]),
+            )
             self.layers.append(ReLU())
         # Hidden layer to output layer.
         self.layers.append(MaskedLinear(dim_list[-2], dim_list[-1]))
